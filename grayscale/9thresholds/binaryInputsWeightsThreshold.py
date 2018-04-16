@@ -73,19 +73,13 @@ def threshold(data, lowerBound, upperBound):
     output[output == INF] = -1
     return output
 
-def convert_batch(inp):
-
-    inp = inp.numpy().transpose((0, 2, 3, 1))
-
-    mean = np.array([0.5, 0.5, 0.5])
-    std = np.array([0.5, 0.5, 0.5])
-
-    inp = std * inp + mean
-    inp = np.clip(inp, 0, 1)
-
-    inp = matplotlib.colors.rgb_to_hsv(inp)
-    inp = inp.transpose((0, 3, 1, 2))
-    return torch.FloatTensor(inp)
+def grayscale(data, dtype='float32'):
+    # luma coding weighted average in video systems
+    r, g, b = np.asarray(.3, dtype=dtype), np.asarray(.59, dtype=dtype), np.asarray(.11, dtype=dtype)
+    rst = r * data[:, :, :, 0] + g * data[:, :, :, 1] + b * data[:, :, :, 2]
+    # add channel dimension
+    rst = rst[:, np.newaxis, :, :]
+    return torch.FloatTensor(rst)
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
     torch.save(state, filename + '_latest.pth.tar')
@@ -229,8 +223,7 @@ def train(epoch):
     model.train()
     step = (epoch-1)*len(train_loader.dataset)/100
     for batch_idx, (data, target) in enumerate(train_loader):
-        data = convert_batch(data)
-        data = data[:, 0 : 1, :] * 360.0
+        data = grayscale(data)
         data = threshold(data,  from_limit, to_limit);
         if args.cuda:
             data, target = data.cuda(), target.cuda()
@@ -270,8 +263,7 @@ def test(epoch):
     test_loss = 0
     correct = 0
     for data, target in test_loader:
-        data = convert_batch(data)
-        data = data[:, 0: 1, :] * 360.0
+        data = grayscale(data)
         data = threshold(data, from_limit, to_limit);
         if args.cuda:
             data, target = data.cuda(), target.cuda()
