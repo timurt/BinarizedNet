@@ -15,7 +15,7 @@ parser.add_argument('--batch-size', type=int, default=100, metavar='N',
                     help='input batch size for training (default: 64)')
 parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
                     help='input batch size for testing (default: 1000)')
-parser.add_argument('--epochs', type=int, default=40, metavar='N',
+parser.add_argument('--epochs', type=int, default=200, metavar='N',
                     help='number of epochs to train (default: 10)')
 parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
                     help='learning rate (default: 0.01)')
@@ -35,7 +35,7 @@ if args.cuda:
     torch.cuda.manual_seed(args.seed)
 
 data_folder = '../../data'
-
+    
 kwargs = {'num_workers': 2, 'pin_memory': True} if args.cuda else {}
 train_loader = torch.utils.data.DataLoader(
    datasets.CIFAR10(data_folder, train=True, download=True,
@@ -59,7 +59,7 @@ def to_np(x):
 def to_var(x):
     if torch.cuda.is_available():
         x = x.cuda()
-    return Variable(x)    
+    return Variable(x)
 
 def grayscale(data, dtype='float32'):
     # luma coding weighted average in video systems
@@ -67,40 +67,138 @@ def grayscale(data, dtype='float32'):
     rst = r * data[:, 0, :, :] + g * data[:, 1, :, :] + b * data[:, 2, :, :]
     # add channel dimension
     rst = rst[:, np.newaxis, :, :]
-    return torch.FloatTensor(rst)
+    return rst
 
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        self.t = 50
-        self.conv1 = nn.Conv2d(self.t, 10, kernel_size=5)
-       # self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
-        self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
-        self.fc1 = nn.Linear(20*25, 50)
-        self.fc2 = nn.Linear(50, 10)
-        self.bn0 = nn.BatchNorm2d(1)
-        self.bn1 = nn.BatchNorm2d(10)
-        self.bn2 = nn.BatchNorm2d(20)
-        self.bn3 = nn.BatchNorm1d(50)
+        self.t = 2
+        self.conv1 = nn.Conv2d(2, 64, kernel_size=3, padding=1)
+        self.bn1 = nn.BatchNorm2d(64)
+        self.relu1 = nn.ReLU(inplace=True)
+
+        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
+
+        self.conv2 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm2d(128)
+        self.relu2 = nn.ReLU(inplace=True)
+
+        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
+
+        self.conv3 = nn.Conv2d(128, 256, kernel_size=3, padding=1)
+        self.bn3 = nn.BatchNorm2d(256)
+        self.relu3 = nn.ReLU(inplace=True)
+
+        self.conv4 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
+        self.bn4 = nn.BatchNorm2d(256)
+        self.relu4 = nn.ReLU(inplace=True)
+
+        self.pool4 = nn.MaxPool2d(kernel_size=2, stride=2)
+
+        self.conv5 = nn.Conv2d(256, 512, kernel_size=3, padding=1)
+        self.bn5 = nn.BatchNorm2d(512)
+        self.relu5 = nn.ReLU(inplace=True)
+
+        self.conv6 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
+        self.bn6 = nn.BatchNorm2d(512)
+        self.relu6 = nn.ReLU(inplace=True)
+
+        self.pool6 = nn.MaxPool2d(kernel_size=2, stride=2)
+
+        self.conv7 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
+        self.bn7 = nn.BatchNorm2d(512)
+        self.relu7 = nn.ReLU(inplace=True)
+
+        self.conv8 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
+        self.bn8 = nn.BatchNorm2d(512)
+        self.relu8 = nn.ReLU(inplace=True)
+
+        self.pool8 = nn.MaxPool2d(kernel_size=2, stride=2)
+
+        self.avg = nn.AvgPool2d(kernel_size=1, stride=1);
+        self.fc = nn.Linear(512, 512)
+        self.classifier = nn.Linear(512, 10)
 
     def forward(self, x):
-        
+
         x = self.th(x, self.t)
         im = x
-        x,w = self.binary_w(x, self.conv1)
-        x = F.conv2d(x,w)
-        x = F.tanh(F.max_pool2d(self.bn1(x), 2))
-        x,w = self.binary_w(x,self.conv2)
-        x = F.conv2d(x,w)
-        x = F.tanh(F.max_pool2d(self.bn2(x), 2))
-        x = self.binary(x)
-        x = x.view(-1, 20*25)
-        x = F.tanh( self.bn3(self.fc1(x)))
-    #    x = self.binary(x)
-   
-        x = self.fc2(x)
-        
-        return x, im
+        #FIRST
+        out, w = self.binary_w(x, self.conv1)
+        out = F.conv2d(out, w, padding=1)
+
+        out = self.bn1(out)
+        out = self.relu1(out)
+
+        #POOLING
+        out = self.pool1(out)
+
+        #SECOND
+        out, w = self.binary_w(out, self.conv2)
+        out = F.conv2d(out, w, padding=1)
+
+        out = self.bn2(out)
+        out = self.relu2(out)
+
+        #POOLING
+        out = self.pool2(out)
+
+        #THIRD
+        out, w = self.binary_w(out, self.conv3)
+        out = F.conv2d(out, w, padding=1)
+
+        out = self.bn3(out)
+        out = self.relu3(out)
+
+        #FOURTH
+        out, w = self.binary_w(out, self.conv4)
+        out = F.conv2d(out, w, padding=1)
+
+        out = self.bn4(out)
+        out = self.relu4(out)
+
+        out = self.pool4(out)
+
+        #FIFTH
+        out, w = self.binary_w(out, self.conv5)
+        out = F.conv2d(out, w, padding=1)
+
+        out = self.bn5(out)
+        out = self.relu5(out)
+
+        #SIXTH
+        out, w = self.binary_w(out, self.conv6)
+        out = F.conv2d(out, w, padding=1)
+
+        out = self.bn6(out)
+        out = self.relu6(out)
+
+        out = self.pool6(out)
+
+        #SEVEN
+        out, w = self.binary_w(out, self.conv7)
+        out = F.conv2d(out, w, padding=1)
+
+        out = self.bn7(out)
+        out = self.relu7(out)
+
+        #EIGHT
+        out, w = self.binary_w(out, self.conv8)
+        out = F.conv2d(out, w, padding=1)
+
+        out = self.bn8(out)
+        out = self.relu8(out)
+
+        out = self.pool8(out)
+
+        out = self.avg(out)
+
+        out = self.binary(out)
+
+        out = out.view(out.size(0), -1)
+        out = self.fc(out)
+        out = self.classifier(out)
+        return out, im
     
     def binary(self, input):
         return Binary()(input)  
@@ -135,8 +233,7 @@ def train(epoch):
         data = grayscale(data)
         if args.cuda:
             data, target = data.cuda(), target.cuda()
-        data, target = Variable(data), Variable(target)
-
+        data, target = Variable(torch.FloatTensor(data)), Variable(target)
         optimizer.zero_grad()
         output, im1 = model(data)
         #loss = F.nll_loss(output, target)
@@ -202,7 +299,7 @@ def test(epoch):
         data = grayscale(data)
         if args.cuda:
             data, target = data.cuda(), target.cuda()
-        data, target = Variable(data, volatile=True), Variable(target)
+        data, target = Variable(torch.FloatTensor(data), volatile=True), Variable(target)
         output, im1 = model(data)
         test_loss += criterion(output, target).data[0]
         pred = output.data.max(1)[1] # get the index of the max log-probability
