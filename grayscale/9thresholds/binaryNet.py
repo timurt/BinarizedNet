@@ -60,15 +60,20 @@ class Threshold(Function):
         m = torch.min(input)
         n = torch.max(input)
         r = np.linspace(m, n, num=self.th+1, endpoint=False)
-        for i in r[1:]: # excluding the smallest value 
-                output = input.clone()
-                output[output< i]=-1
-                output[output>=i]= 1
-               
-                if i==r[1]:
-                    out = output #torch.unsqueeze(output,0)
-                else:
-                    out = torch.cat([out,output],1) #torch.cat([out,torch.unsqueeze(output,0)],0) 
+        for j in range(1, len(r)):
+            lowerBound = r[j - 1]
+            upperBound = r[j]
+            INF = -100
+            output = input.clone()
+            output[output < lowerBound] = INF
+            output[output >= upperBound] = INF
+            output[output != INF] = 1
+            output[output == INF] = -1
+            if j == 1:
+                out = output  # torch.unsqueeze(output,0)
+            else:
+                out = torch.cat([out, output], 1)
+
         return out
 
 
