@@ -33,8 +33,7 @@ mainCifarVGG.py
 --------------
 | Number of thresholds | Accuracy rate |
 | ------------- |:-------------:|
-|      |  |
-|      |  |
+|   3  | 18.82  |
 
 
 mainResNet.py
@@ -42,3 +41,13 @@ mainResNet.py
 | Number of thresholds | Accuracy rate |
 | ------------- |:-------------:|
 | 2     | 62.84 |
+
+
+mainMultipeModels.py
+--------
+| Number of thresholds | Accuracy rate |
+| ------------- |:-------------:|
+| 3     | 40.45 |
+| 9     |  |
+| 15     |  |
+| 50     |  |
