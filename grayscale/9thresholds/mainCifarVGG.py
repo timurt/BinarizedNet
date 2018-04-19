@@ -72,8 +72,8 @@ def grayscale(data, dtype='float32'):
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        self.t = 2
-        self.conv1 = nn.Conv2d(2, 64, kernel_size=3, padding=1)
+        self.t = 3
+        self.conv1 = nn.Conv2d(self.t, 64, kernel_size=3, padding=1)
         self.bn1 = nn.BatchNorm2d(64)
         self.relu1 = nn.ReLU(inplace=True)
 

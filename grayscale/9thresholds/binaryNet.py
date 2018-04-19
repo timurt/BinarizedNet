@@ -59,7 +59,7 @@ class Threshold(Function):
         self.save_for_backward(input) 
         m = torch.min(input)
         n = torch.max(input)
-        r = np.linspace(m, n, num=self.th+1, endpoint=False)
+        r = np.linspace(m, n, num=self.th+1, endpoint=True)
         for j in range(1, len(r)):
             lowerBound = r[j - 1]
             upperBound = r[j]

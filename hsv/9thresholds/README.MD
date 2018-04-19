@@ -1,6 +1,8 @@
 Cifar10 to HSV colorspace, 9 thresholds
 ===================
 
+https://colab.research.google.com/drive/12J72fVUyOf6zuCbotsPIhx0EZeO84med
+
 - binaryInputsWeightsThreshold.py - trains and stores 9 models 
 using binarized VGG11 model
 - binaryInputsWeightsThresholdTest.py - Helper class, displays

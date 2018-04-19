@@ -66,7 +66,7 @@ def to_var(x):
 
 def threshold(data, lowerBound, upperBound):
     INF = -100
-    output = data
+    output = data.clone()
     output[lowerBound > output] = INF
     output[upperBound <= output] = INF
     output[output != INF] = 1
