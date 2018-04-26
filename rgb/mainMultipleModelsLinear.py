@@ -37,7 +37,7 @@ torch.manual_seed(args.seed)
 if args.cuda:
     torch.cuda.manual_seed(args.seed)
 
-data_folder = '../../data'
+data_folder = '../data'
 best_prec1 = 0.0
 kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
 train_loader = torch.utils.data.DataLoader(
@@ -70,15 +70,6 @@ def threshold(data, lowerBound, upperBound):
     output[output != INF] = 1
     output[output == INF] = -1
     return output
-
-
-def grayscale(data, dtype='float32'):
-    # luma coding weighted average in video systems
-    r, g, b = np.asarray(.3, dtype=dtype), np.asarray(.59, dtype=dtype), np.asarray(.11, dtype=dtype)
-    rst = r * data[:, 0, :, :] + g * data[:, 1, :, :] + b * data[:, 2, :, :]
-    # add channel dimension
-    rst = rst[:, np.newaxis, :, :]
-    return torch.FloatTensor(rst)
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
     torch.save(state, filename + '_latest.pth.tar')
@@ -122,13 +113,12 @@ class Net(nn.Module):
 class FcNet(nn.Module):
     def __init__(self):
         super(FcNet, self).__init__()
-        self.fc1 = nn.Linear(7500, 1500)
-        self.fc2 = nn.Linear(1500, 512)
+        self.fc2 = nn.Linear(4500, 512)
         self.fc3 = nn.Linear(512, 90)
         self.fc4 = nn.Linear(90, 10)
 
     def forward(self, x):
-        x = self.fc1(x)
+        #x = self.fc1(x)
         x = self.fc2(x)
         x = self.fc3(x)
         x = self.fc4(x)
@@ -166,8 +156,7 @@ def train(epoch):
         models[i].eval()
     step = (epoch-1)*len(train_loader.dataset)/100
     for batch_idx, (data, target) in enumerate(train_loader):
-        data = grayscale(data)
-
+        data = data[:, 0:1, :, :]
         outputs = [];
         for i in range(0, len(models)):
             from_limit = r[i]
@@ -222,8 +211,7 @@ def test(epoch):
     test_loss = 0
     correct = 0
     for data, target in test_loader:
-        data = grayscale(data)
-
+        data = data[:, 0:1, :, :]
         outputs = []
         for i in range(0, len(models)):
             from_limit = r[i]

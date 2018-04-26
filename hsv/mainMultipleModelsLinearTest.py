@@ -119,25 +119,33 @@ class Net(nn.Module):
     def binary_w(self, input, param):
         return Binary_W()(input, param.weight)
 
-class FcNet(nn.Module):
-    def __init__(self):
-        super(FcNet, self).__init__()
-        self.fc1 = nn.Linear(7500, 1500)
-        self.fc2 = nn.Linear(1500, 512)
-        self.fc3 = nn.Linear(512, 90)
-        self.fc4 = nn.Linear(90, 10)
+def test(epoch):
+    global best_prec1
+    model.eval()
+    test_loss = 0
+    correct = 0
+    for data, target in test_loader:
+        data = grayscale(data)
+        data = threshold(data, from_limit, to_limit);
+        if args.cuda:
+            data, target = data.cuda(), target.cuda()
+        data, target = Variable(data, volatile=True), Variable(target)
+        output = model(data)
+        test_loss += criterion(output, target).data[0]
+        pred = output.data.max(1)[1]  # get the index of the max log-probability
+        correct += pred.eq(target.data).cpu().sum()
 
-    def forward(self, x):
-        x = self.fc1(x)
-        x = self.fc2(x)
-        x = self.fc3(x)
-        x = self.fc4(x)
-        return x
+    test_loss = test_loss
+    test_loss /= len(test_loader)  # loss function already averages over batch size
+
+    accuracy = 100. * correct / len(test_loader.dataset)
+    print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.2f}%), Best ({:.2f}%)\n'.format(
+        test_loss, correct, len(test_loader.dataset),
+        accuracy, best_prec1))
 
 thresholds = 3
 minVal = -1.0
 maxVal = 1.0
-models = []
 r = np.linspace(minVal, maxVal, num=thresholds+1, endpoint=True)
 for j in range(1, len(r)):
     lr = 0.01
@@ -147,123 +155,22 @@ for j in range(1, len(r)):
 
     file_name = 'BINARY_CAMILA_' + str(j) + '_' + str(len(r) - 1) + '_best.pth.tar'
     checkpoint = torch.load(file_name)
+    best_prec1 = checkpoint['best_prec1']
     model.load_state_dict(checkpoint['state_dict'])
-    models.append(model)
 
+    optimizer = optim.SGD(model.parameters(), lr=lr, momentum=args.momentum)
+    criterion = nn.CrossEntropyLoss()
 
-model = FcNet()
+    from_limit = r[j-1]
+    to_limit = r[j]
 
-if args.cuda:
-    model.cuda()
+    print('Best precision for threshold {}, is {}\n'.format((j), best_prec1))
+    test(1)
 
-optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
-criterion = nn.CrossEntropyLoss()
-i = 0
-
-def train(epoch):
-    model.train()
-    for i in range(0, len(models)):
-        models[i].eval()
-    step = (epoch-1)*len(train_loader.dataset)/100
-    for batch_idx, (data, target) in enumerate(train_loader):
-        data = grayscale(data)
-
-        outputs = [];
-        for i in range(0, len(models)):
-            from_limit = r[i]
-            to_limit = r[i + 1]
-            inp = threshold(data, from_limit, to_limit);
-            if args.cuda:
-                inp = inp.cuda()
-            inp = Variable(inp)
-            out = models[i](inp)
-            outputs.append(out.cpu().data.numpy())
-
-        input = np.column_stack( outputs )
-        input = torch.FloatTensor(input)
-        #input = np.stack((output1.data.numpy(), output2.data.numpy(), output3.data.numpy()), axis=1)
-
-        if args.cuda:
-            input, target = input.cuda(), target.cuda()
-        input, target = Variable(input), Variable(target)
-        optimizer.zero_grad()
-        output = model(input)
-        #loss = F.nll_loss(output, target)
-        loss = criterion(output, target)
-        if loss.data[0]<10.0:
-            #print ('True')
-            loss.backward()
-            optimizer.step()
-            
-        if batch_idx % args.log_interval == 0:
-            print('Train Epoch: {} [{}/{} ({:.00f}%)]\tLoss: {:.6f}'.format(
-                epoch, batch_idx * len(data), len(train_loader.dataset),
-                100. * batch_idx / len(train_loader), loss.data[0]))
-            
-            # Compute accuracy
-            _, argmax = torch.max(output, 1)
-
-def adjust_learning_rate(lr, optimizer, epoch):
-    """Sets the learning rate to the initial LR decayed by 10 after 150 and 225 epochs"""
-    lr = lr * (0.1 ** (epoch // 13)) 
-
-    print ('Learning rate: ' + str(lr))
-    # log to TensorBoard
-    
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = lr  
-                   
         
-def test(epoch):
-    global best_prec1
-    model.eval()
-    for i in range(0, len(models)):
-        models[i].eval()
-    test_loss = 0
-    correct = 0
-    for data, target in test_loader:
-        data = grayscale(data)
-
-        outputs = []
-        for i in range(0, len(models)):
-            from_limit = r[i]
-            to_limit = r[i + 1]
-            inp = threshold(data, from_limit, to_limit);
-            if args.cuda:
-                inp = inp.cuda()
-            inp = Variable(inp)
-            out = models[i](inp)
-            outputs.append(out.cpu().data.numpy())
-
-        input = np.column_stack( outputs)
-        input = torch.FloatTensor(input)
-        if args.cuda:
-            input, target = input.cuda(), target.cuda()
-        input, target = Variable(input, volatile=True), Variable(target)
-        output = model(input)
-        test_loss += criterion(output, target).data[0]
-        pred = output.data.max(1)[1] # get the index of the max log-probability
-        correct += pred.eq(target.data).cpu().sum()
-
-    test_loss = test_loss
-    test_loss /= len(test_loader) # loss function already averages over batch size
-
-    accuracy = 100. * correct / len(test_loader.dataset)
-    print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.2f}%), Best ({:.2f}%)\n'.format(
-        test_loss, correct, len(test_loader.dataset),
-        accuracy, best_prec1))
-
-    is_best = accuracy > best_prec1
-    best_prec1 = max(accuracy, best_prec1)
-    save_checkpoint({
-        'epoch': epoch + 1,
-        'state_dict': model.state_dict(),
-        'best_prec1': best_prec1,
-    }, is_best, 'BINARY_CAMILA_LINEAR')
 
 
-for epoch in range(1, args.epochs + 1):
-   adjust_learning_rate(args.lr, optimizer, epoch)
-   train(epoch)
-   test(epoch)
+
+
+
     

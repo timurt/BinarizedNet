@@ -4,11 +4,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-import numpy as np
 from torchvision import datasets, transforms
 from torch.autograd import Variable
-from binaryNet import Binary_W, Binary, Threshold
+from binaryNet import Binary_W, Binary
 import shutil
+import numpy as np
 import matplotlib
 from matplotlib.colors import hsv_to_rgb
 
@@ -37,30 +37,33 @@ torch.manual_seed(args.seed)
 if args.cuda:
     torch.cuda.manual_seed(args.seed)
 
-data_folder = '../../data'
-best_prec1 = 0.0
+data_folder = '../data'
+
 kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
 train_loader = torch.utils.data.DataLoader(
     datasets.CIFAR10(data_folder, train=True, download=True,
-                   transform=transforms.Compose([
-                       transforms.ToTensor(),
-                       transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-                   ])),
+                     transform=transforms.Compose([
+                         transforms.ToTensor(),
+                         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                     ])),
     batch_size=args.batch_size, shuffle=True, **kwargs)
 test_loader = torch.utils.data.DataLoader(
     datasets.CIFAR10(data_folder, train=False, transform=transforms.Compose([
-                       transforms.ToTensor(),
-                       transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-                   ])),
+        transforms.ToTensor(),
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+    ])),
     batch_size=args.batch_size, shuffle=True, **kwargs)
-    
+
+
 def to_np(x):
     return x.data.cpu().numpy()
+
 
 def to_var(x):
     if torch.cuda.is_available():
         x = x.cuda()
-    return Variable(x)    
+    return Variable(x)
+
 
 def threshold(data, lowerBound, upperBound):
     INF = -100
@@ -72,18 +75,11 @@ def threshold(data, lowerBound, upperBound):
     return output
 
 
-def grayscale(data, dtype='float32'):
-    # luma coding weighted average in video systems
-    r, g, b = np.asarray(.3, dtype=dtype), np.asarray(.59, dtype=dtype), np.asarray(.11, dtype=dtype)
-    rst = r * data[:, 0, :, :] + g * data[:, 1, :, :] + b * data[:, 2, :, :]
-    # add channel dimension
-    rst = rst[:, np.newaxis, :, :]
-    return torch.FloatTensor(rst)
-
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
     torch.save(state, filename + '_latest.pth.tar')
     if is_best:
         shutil.copyfile(filename + '_latest.pth.tar', filename + '_best.pth.tar')
+
 
 class Net(nn.Module):
     def __init__(self):
@@ -106,10 +102,10 @@ class Net(nn.Module):
         x = F.tanh(F.max_pool2d(self.bn2(x), 2))
         x = self.binary(x)
         x = x.view(-1, 20 * 25)
-        #x = F.tanh(self.bn3(self.fc1(x)))
+        x = F.tanh(self.bn3(self.fc1(x)))
         #    x = self.binary(x)
 
-        #x = self.fc2(x)
+        x = self.fc2(x)
 
         return x
 
@@ -119,134 +115,63 @@ class Net(nn.Module):
     def binary_w(self, input, param):
         return Binary_W()(input, param.weight)
 
-class FcNet(nn.Module):
-    def __init__(self):
-        super(FcNet, self).__init__()
-        self.fc1 = nn.Linear(7500, 1500)
-        self.fc2 = nn.Linear(1500, 512)
-        self.fc3 = nn.Linear(512, 90)
-        self.fc4 = nn.Linear(90, 10)
-
-    def forward(self, x):
-        x = self.fc1(x)
-        x = self.fc2(x)
-        x = self.fc3(x)
-        x = self.fc4(x)
-        return x
-
-thresholds = 3
-minVal = -1.0
-maxVal = 1.0
-models = []
-r = np.linspace(minVal, maxVal, num=thresholds+1, endpoint=True)
-for j in range(1, len(r)):
-    lr = 0.01
-    model = Net()
-    if args.cuda:
-        model.cuda()
-
-    file_name = 'BINARY_CAMILA_' + str(j) + '_' + str(len(r) - 1) + '_best.pth.tar'
-    checkpoint = torch.load(file_name)
-    model.load_state_dict(checkpoint['state_dict'])
-    models.append(model)
-
-
-model = FcNet()
-
-if args.cuda:
-    model.cuda()
-
-optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
-criterion = nn.CrossEntropyLoss()
-i = 0
-
 def train(epoch):
     model.train()
-    for i in range(0, len(models)):
-        models[i].eval()
-    step = (epoch-1)*len(train_loader.dataset)/100
+    step = (epoch - 1) * len(train_loader.dataset) / 100
     for batch_idx, (data, target) in enumerate(train_loader):
-        data = grayscale(data)
-
-        outputs = [];
-        for i in range(0, len(models)):
-            from_limit = r[i]
-            to_limit = r[i + 1]
-            inp = threshold(data, from_limit, to_limit);
-            if args.cuda:
-                inp = inp.cuda()
-            inp = Variable(inp)
-            out = models[i](inp)
-            outputs.append(out.cpu().data.numpy())
-
-        input = np.column_stack( outputs )
-        input = torch.FloatTensor(input)
-        #input = np.stack((output1.data.numpy(), output2.data.numpy(), output3.data.numpy()), axis=1)
-
+        data = data[:, 0:1, :, :]
+        data = threshold(data, from_limit, to_limit);
         if args.cuda:
-            input, target = input.cuda(), target.cuda()
-        input, target = Variable(input), Variable(target)
+            data, target = data.cuda(), target.cuda()
+        data, target = Variable(data), Variable(target)
         optimizer.zero_grad()
-        output = model(input)
-        #loss = F.nll_loss(output, target)
+        output = model(data)
+        # loss = F.nll_loss(output, target)
         loss = criterion(output, target)
-        if loss.data[0]<10.0:
-            #print ('True')
+        if loss.data[0] < 10.0:
+            # print ('True')
             loss.backward()
             optimizer.step()
-            
+
         if batch_idx % args.log_interval == 0:
             print('Train Epoch: {} [{}/{} ({:.00f}%)]\tLoss: {:.6f}'.format(
                 epoch, batch_idx * len(data), len(train_loader.dataset),
-                100. * batch_idx / len(train_loader), loss.data[0]))
-            
+                       100. * batch_idx / len(train_loader), loss.data[0]))
+
             # Compute accuracy
             _, argmax = torch.max(output, 1)
+            accuracy = (target == argmax.squeeze()).float().mean()
+
 
 def adjust_learning_rate(lr, optimizer, epoch):
     """Sets the learning rate to the initial LR decayed by 10 after 150 and 225 epochs"""
-    lr = lr * (0.1 ** (epoch // 13)) 
+    lr = lr * (0.1 ** (epoch // 10))
 
-    print ('Learning rate: ' + str(lr))
+    print('Learning rate: ' + str(lr))
     # log to TensorBoard
-    
+
     for param_group in optimizer.param_groups:
-        param_group['lr'] = lr  
-                   
-        
+        param_group['lr'] = lr
+
+
 def test(epoch):
     global best_prec1
     model.eval()
-    for i in range(0, len(models)):
-        models[i].eval()
     test_loss = 0
     correct = 0
     for data, target in test_loader:
-        data = grayscale(data)
-
-        outputs = []
-        for i in range(0, len(models)):
-            from_limit = r[i]
-            to_limit = r[i + 1]
-            inp = threshold(data, from_limit, to_limit);
-            if args.cuda:
-                inp = inp.cuda()
-            inp = Variable(inp)
-            out = models[i](inp)
-            outputs.append(out.cpu().data.numpy())
-
-        input = np.column_stack( outputs)
-        input = torch.FloatTensor(input)
+        data = data[:, 0:1, :, :]
+        data = threshold(data, from_limit, to_limit);
         if args.cuda:
-            input, target = input.cuda(), target.cuda()
-        input, target = Variable(input, volatile=True), Variable(target)
-        output = model(input)
+            data, target = data.cuda(), target.cuda()
+        data, target = Variable(data, volatile=True), Variable(target)
+        output = model(data)
         test_loss += criterion(output, target).data[0]
-        pred = output.data.max(1)[1] # get the index of the max log-probability
+        pred = output.data.max(1)[1]  # get the index of the max log-probability
         correct += pred.eq(target.data).cpu().sum()
 
     test_loss = test_loss
-    test_loss /= len(test_loader) # loss function already averages over batch size
+    test_loss /= len(test_loader)  # loss function already averages over batch size
 
     accuracy = 100. * correct / len(test_loader.dataset)
     print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.2f}%), Best ({:.2f}%)\n'.format(
@@ -259,11 +184,29 @@ def test(epoch):
         'epoch': epoch + 1,
         'state_dict': model.state_dict(),
         'best_prec1': best_prec1,
-    }, is_best, 'BINARY_CAMILA_LINEAR')
+    }, is_best, file_name)
 
+thresholds = 9
+minVal = -1.0
+maxVal = 1.0
+r = np.linspace(minVal, maxVal, num=thresholds+1, endpoint=True)
+for j in range(1, len(r)):
+    print('Threshold No {}\n'.format(j))
 
-for epoch in range(1, args.epochs + 1):
-   adjust_learning_rate(args.lr, optimizer, epoch)
-   train(epoch)
-   test(epoch)
-    
+    lr = 0.01
+    model = Net()
+    if args.cuda:
+        model.cuda()
+    optimizer = optim.SGD(model.parameters(), lr=lr, momentum=args.momentum)
+    criterion = nn.CrossEntropyLoss()
+
+    from_limit = r[j - 1]
+    to_limit = r[j]
+
+    file_name = 'BINARY_CAMILA_' + str(j) + '_' + str(len(r) - 1)
+    best_prec1 = 0.0
+
+    for epoch in range(1, args.epochs + 1):
+        adjust_learning_rate(args.lr, optimizer, epoch)
+        train(epoch)
+        test(epoch)
